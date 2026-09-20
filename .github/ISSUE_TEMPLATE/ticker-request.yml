@@ -1,0 +1,34 @@
+name: Request a supported ticker
+description: Ask for a security to be added to the scheduled risk analytics universe.
+title: "Ticker request: "
+labels: ["ticker-request"]
+body:
+  - type: input
+    id: ticker
+    attributes:
+      label: Ticker
+      description: Use the Yahoo Finance/provider symbol when possible.
+      placeholder: NVDA or 005930.KS
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Security name
+      placeholder: NVIDIA Corporation
+  - type: dropdown
+    id: instrument
+    attributes:
+      label: Instrument type
+      options:
+        - Equity
+        - ETF
+        - ADR
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add market, exchange, or provider-symbol context that will help validate the request.

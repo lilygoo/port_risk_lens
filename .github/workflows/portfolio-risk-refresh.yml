@@ -1,0 +1,36 @@
+name: Portfolio risk refresh
+
+on:
+  schedule:
+    - cron: "35 20 * * 1-5"
+      timezone: "America/New_York"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portfolio-risk-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      UNIVERSE_SOURCE: file
+      UNIVERSE_FILE: config/initial_universe.csv
+      CALCULATION_VERSION: v1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --locked
+      - name: Verify analytics contracts
+        run: uv run pytest -q
+      - name: Refresh prices and risk metrics
+        run: uv run port-risk-lens refresh

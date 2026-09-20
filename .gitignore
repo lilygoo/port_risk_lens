@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Next.js / Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+.env*.local
+.vercel/
+
+# macOS
+.DS_Store
