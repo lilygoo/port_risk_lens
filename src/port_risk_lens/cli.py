@@ -32,7 +32,7 @@ def main() -> None:
         return
     if args.command == "compare-universe":
         file_tickers = {security.ticker for security in FileUniverseSource(Path(args.file)).load_active()}
-        client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        client = create_client(os.environ["NEXT_PUBLIC_SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
         database_tickers = {security.ticker for security in SupabaseUniverseSource(client).load_active()}
         result = {
             "matches": file_tickers == database_tickers,

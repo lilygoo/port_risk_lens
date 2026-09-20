@@ -17,7 +17,7 @@ def _chunks(rows: list[dict], size: int = 500) -> Iterable[list[dict]]:
 
 class SupabaseStore:
     def __init__(self, client: Client | None = None) -> None:
-        self.client = client or create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        self.client = client or create_client(os.environ["NEXT_PUBLIC_SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
 
     def start_run(self, provider: str, git_sha: str | None) -> str:
         response = self.client.table("pipeline_runs").insert({
@@ -90,3 +90,13 @@ class SupabaseStore:
             rows.append(row)
         for chunk in _chunks(rows):
             self.client.table("security_beta_metrics").upsert(chunk, on_conflict="ticker,as_of_date,lookback_days,benchmark_ticker").execute()
+
+    def resolve_ticker_support_requests(self, active_tickers: Iterable[str]) -> None:
+        """Mark pending requests as added once the active universe contains them."""
+        tickers = sorted(set(active_tickers))
+        if not tickers:
+            return
+        self.client.table("ticker_support_requests").update({
+            "status": "added",
+            "resolved_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("status", "requested").in_("ticker", tickers).execute()

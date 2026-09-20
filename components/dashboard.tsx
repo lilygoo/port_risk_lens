@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, CirclePlus, ExternalLink, Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, ChevronDown, CirclePlus, Pencil, RotateCcw, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { PortfolioEditor } from "@/components/portfolio-editor";
+import { InlinePortfolioEditor } from "@/components/inline-portfolio-editor";
 import { applyTrades, betaAggregate, betaContribution, portfolioBeta, positionRows, summarizePortfolio } from "@/lib/portfolio";
 import {
   BENCHMARKS, LOOKBACKS, METRICS,
@@ -20,7 +21,7 @@ const metricLabels: Record<Metric, string> = {
 
 type MetricColumn = { metric: Metric; lookback: LookbackDays; benchmark?: Benchmark };
 
-function currency(value: number, decimals = 0) {
+function currency(value: number, decimals = 2) {
   return new Intl.NumberFormat("en-US", {
     style: "currency", currency: "USD", maximumFractionDigits: decimals, minimumFractionDigits: decimals,
   }).format(value);
@@ -47,7 +48,7 @@ function MetricCell({ position, column, nav }: { position: Position; column: Met
   if ((column.metric === "beta" || column.metric === "beta_contribution") && column.benchmark) {
     const reading = position.metrics.beta[column.benchmark][column.lookback];
     const value = column.metric === "beta" ? reading.value : betaContribution(position, nav, column.benchmark, column.lookback);
-    return <span className={`metric-reading metric-${reading.source}`} title={`${sourceLabel(reading.source)} beta`}><strong>{number(value, 3)}</strong>{reading.source !== "calculated" && <small>{sourceLabel(reading.source)}</small>}</span>;
+    return <span className={`metric-reading metric-${reading.source}`} title={`${sourceLabel(reading.source)} beta`}><strong>{number(value, 2)}</strong>{reading.source !== "calculated" && <small>{sourceLabel(reading.source)}</small>}</span>;
   }
   const value = column.metric === "total_volatility"
     ? position.metrics.totalVolatility[column.lookback]
@@ -67,28 +68,58 @@ function SummaryCell({ label, current, simulated, difference, incomplete = false
   );
 }
 
-function SupportedTickers({ portfolio }: { portfolio: PortfolioData }) {
+function SupportedTickers({ portfolio, authenticated }: { portfolio: PortfolioData; authenticated: boolean }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
-  const filtered = portfolio.supportedSecurities.filter((security) => security.ticker.includes(query.trim().toUpperCase()));
+  const [priceFilter, setPriceFilter] = useState<"all" | "available" | "missing">("all");
+  const [requestedTicker, setRequestedTicker] = useState("");
+  const [localRequests, setLocalRequests] = useState(portfolio.tickerSupportRequests);
+  const [message, setMessage] = useState("");
+  const requests = authenticated ? portfolio.tickerSupportRequests : localRequests;
+  const supported = new Set(portfolio.supportedSecurities.map((security) => security.ticker));
+  const rows = [
+    ...portfolio.supportedSecurities.map((security) => ({ ...security, support: "supported" as const })),
+    ...requests.filter((request) => !supported.has(request.ticker)).map((request) => ({
+      ticker: request.ticker, latestPrice: null, priceDate: null, pipelineRunId: null, analyticsAsOf: null,
+      availableMetricCount: 0, analyticsStatus: "unavailable" as const, support: "requested" as const,
+    })),
+  ].sort((a, b) => a.ticker.localeCompare(b.ticker));
+  const filtered = rows.filter((security) => (
+    security.ticker.includes(query.trim().toUpperCase())
+    && (priceFilter === "all" || (priceFilter === "available" ? security.latestPrice !== null : security.latestPrice === null))
+  ));
+
+  async function requestTicker() {
+    const ticker = requestedTicker.trim().toUpperCase();
+    if (!/^[A-Z0-9]+(?:[.-][A-Z0-9]+)*$/.test(ticker)) { setMessage("Enter a valid ticker."); return; }
+    if (supported.has(ticker)) { setMessage(`${ticker} is already supported.`); return; }
+    if (requests.some((request) => request.ticker === ticker && request.status === "requested")) { setMessage(`${ticker} is already requested.`); return; }
+    if (!authenticated) {
+      setLocalRequests((current) => [...current, { ticker, status: "requested" }]);
+      setRequestedTicker(""); setMessage(`${ticker} is now requested in this local preview.`); return;
+    }
+    const response = await fetch("/api/ticker-support-requests", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ticker }) });
+    const body = await response.json().catch(() => ({}));
+    setMessage(response.ok ? `${ticker} is now requested.` : body.error ?? "Ticker request could not be saved.");
+    if (response.ok) { setRequestedTicker(""); router.refresh(); }
+  }
   return (
     <section className="panel supported-panel" aria-labelledby="supported-title">
       <div className="panel-heading">
         <div><h2 id="supported-title">Supported tickers</h2><p>Symbols included in the scheduled analytics pipeline</p></div>
-        <label className="search-field"><Search size={15} aria-hidden="true" /><span className="sr-only">Filter supported tickers</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter ticker" /></label>
+        <div className="supported-actions"><select value={priceFilter} onChange={(event) => setPriceFilter(event.target.value as "all" | "available" | "missing")} aria-label="Filter by price status"><option value="all">All price statuses</option><option value="available">Price available</option><option value="missing">Price missing</option></select><input value={requestedTicker} onChange={(event) => setRequestedTicker(event.target.value.toUpperCase())} placeholder="Ticker" aria-label="Request a ticker" /><button className="secondary-button" type="button" onClick={requestTicker}>Request ticker</button><label className="search-field"><Search size={15} aria-hidden="true" /><span className="sr-only">Filter supported tickers</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter ticker" /></label></div>
       </div>
       <div className="supported-note">
-        <p>Unsupported tickers can still be held using manual or application-default values. “Ready” requires all 15 metrics at the current global analytics publication date.</p>
-        <a className="secondary-button" href={`${REPOSITORY_URL}/issues/new?template=ticker-request.yml`} target="_blank" rel="noreferrer">Request a ticker <ExternalLink size={13} /></a>
+        <p>Unsupported tickers can still be held using manual or application-default values. “Requested” means the ticker is not yet in the scheduled analytics universe. {message}</p>
       </div>
       <div className="table-scroll">
         <table className="supported-table">
-          <thead><tr><th scope="col">Ticker</th><th scope="col">Price status</th><th scope="col">Price date</th><th scope="col">Analytics date</th><th scope="col">Analytics status</th></tr></thead>
+          <thead><tr><th scope="col">Ticker</th><th scope="col">Support status</th><th scope="col">Price status</th><th scope="col">Analytics status</th></tr></thead>
           <tbody>{filtered.map((security) => (
             <tr key={security.ticker}>
               <th scope="row" className="ticker-cell">{security.ticker}</th>
+              <td><span className={`status-badge status-${security.support === "supported" ? "ready" : "partial"}`}>{security.support === "supported" ? "Supported" : "Requested"}</span></td>
               <td><span className={`status-badge ${security.latestPrice === null ? "status-unavailable" : "status-ready"}`}>{security.latestPrice === null ? "Missing" : "Available"}</span></td>
-              <td>{security.priceDate ?? "—"}</td>
-              <td>{security.analyticsAsOf ?? "—"}</td>
               <td><span className={`status-badge status-${security.analyticsStatus}`}>{security.analyticsStatus === "ready" ? "Ready" : security.analyticsStatus === "partial" ? `Partial · ${security.availableMetricCount}/15` : "Unavailable · 0/15"}</span></td>
             </tr>
           ))}</tbody>
@@ -165,10 +196,8 @@ export function Dashboard({
         <Link className={activeTab === "supported" ? "active" : ""} href="/?tab=supported">Supported tickers</Link>
       </nav>
 
-      {activeTab === "supported" ? <SupportedTickers portfolio={initialPortfolio} /> : <>
-        {editing && <PortfolioEditor portfolio={initialPortfolio} canSave={authenticated} onCancel={() => setEditing(false)} onSaved={() => { setTrades([]); setEditing(false); }} />}
-
-        <section className="panel positions-panel" aria-labelledby="positions-title">
+      {activeTab === "supported" ? <SupportedTickers portfolio={initialPortfolio} authenticated={authenticated} /> : <>
+        {editing ? <InlinePortfolioEditor portfolio={initialPortfolio} canSave={authenticated} onCancel={() => setEditing(false)} onSaved={() => { setTrades([]); setEditing(false); }} /> : <section className="panel positions-panel" aria-labelledby="positions-title">
           <div className="panel-heading">
             <div><h2 id="positions-title">Current positions</h2><p>Signed exposure and single-name risk metrics</p></div>
             <div className="panel-actions">
@@ -200,24 +229,24 @@ export function Dashboard({
                   {columns.map((column) => {
                     if (!column.benchmark || (column.metric !== "beta" && column.metric !== "beta_contribution")) return <td key={`${column.metric}-${column.benchmark ?? "standalone"}-${column.lookback}`}>—</td>;
                     const aggregate = betaAggregate(initialPortfolio.positions, initialPortfolio.nav, column.benchmark, column.lookback);
-                    return <td key={`${column.metric}-${column.benchmark}-${column.lookback}`}><span className={`metric-reading aggregate-${aggregate.status}`} title={`Calculated ${percent(aggregate.coverage.calculated)} · Manual ${percent(aggregate.coverage.manual)} · Default ${percent(aggregate.coverage.default)}`}><strong>{number(aggregate.value, 3)}</strong><small>{aggregate.status === "calculated" ? "Calculated" : aggregate.status === "manual-assisted" ? "Manual-assisted" : "Default-assisted"}{initialPortfolio.valuationIncomplete ? " · incomplete" : ""}</small></span></td>;
+                    return <td key={`${column.metric}-${column.benchmark}-${column.lookback}`}><span className={`metric-reading aggregate-${aggregate.status}`} title={`Calculated ${percent(aggregate.coverage.calculated)} · Manual ${percent(aggregate.coverage.manual)} · Default ${percent(aggregate.coverage.default)}`}><strong>{number(aggregate.value, 2)}</strong><small>{aggregate.status === "calculated" ? "Calculated" : aggregate.status === "manual-assisted" ? "Manual-assisted" : "Default-assisted"}{initialPortfolio.valuationIncomplete ? " · incomplete" : ""}</small></span></td>;
                   })}
                 </tr>
                 {filteredRows.map((position) => (
                   <tr key={position.ticker} className={position.price === 0 ? "unpriced-row" : ""}>
                     <th scope="row" className="ticker-cell">{position.ticker}{!position.supported && <small>Unsupported</small>}</th>
                     <td><span className={`price-reading price-${position.priceSource}`}>{currency(position.price, 2)}{position.priceSource !== "pipeline" && <small>{position.priceSource === "manual" ? "Manual fallback" : "Default $0"}</small>}</span></td>
-                    <td>{position.quantity.toLocaleString("en-US", { maximumFractionDigits: 3 })}</td>
+                    <td>{position.quantity.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td className={position.marketValue < 0 ? "negative" : ""}>{currency(position.marketValue)}</td>
                     <td className={position.exposure < 0 ? "negative" : ""}>{percent(position.exposure)}</td>
                     {columns.map((column) => <td key={`${column.metric}-${column.benchmark ?? "standalone"}-${column.lookback}`}><MetricCell position={position} column={column} nav={initialPortfolio.nav} /></td>)}
                   </tr>
                 ))}
-                <tr className="cash-row"><th scope="row">Cash<small>Beta contribution 0</small></th><td>—</td><td>—</td><td>{currency(initialPortfolio.cash)}</td><td>{percent(currentSummary.cashExposure)}</td>{columns.map((column) => <td key={`${column.metric}-${column.benchmark ?? "standalone"}-${column.lookback}`}>{column.metric === "beta" || column.metric === "beta_contribution" ? "0.000" : "—"}</td>)}</tr>
+                <tr className="cash-row"><th scope="row">Cash<small>Beta contribution 0.00</small></th><td>—</td><td>—</td><td>{currency(initialPortfolio.cash)}</td><td>{percent(currentSummary.cashExposure)}</td>{columns.map((column) => <td key={`${column.metric}-${column.benchmark ?? "standalone"}-${column.lookback}`}>{column.metric === "beta" || column.metric === "beta_contribution" ? "0.00" : "—"}</td>)}</tr>
               </tbody>
             </table>
           </div>
-        </section>
+        </section>}
 
         <section className="scenario-section" aria-labelledby="scenario-title">
           <div className="section-heading"><div><h2 id="scenario-title">Scenario simulator</h2><p>Stage hypothetical trades without changing the saved portfolio.</p></div><button className="text-button danger-button" type="button" onClick={() => setTrades([])} disabled={!trades.length}><RotateCcw size={14} aria-hidden="true" /> Reset scenario</button></div>

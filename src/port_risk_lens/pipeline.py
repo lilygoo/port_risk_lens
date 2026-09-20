@@ -59,6 +59,7 @@ def refresh(requested_as_of: date | None = None, store: SupabaseStore | None = N
         calculation_version = os.getenv("CALCULATION_VERSION", CALCULATION_VERSION)
         database.upsert_risk_metrics(risk_metrics, run_id, calculation_version)
         database.upsert_beta_metrics(beta_metrics, run_id, calculation_version)
+        database.resolve_ticker_support_requests(security.ticker for security in securities)
         status = "partial_success" if errors else "success"
         database.finish_run(run_id, status, errors, analytics_as_of=as_of)
         return {"run_id": run_id, "status": status, "as_of": as_of.isoformat(), "errors": errors}

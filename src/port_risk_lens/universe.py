@@ -76,7 +76,7 @@ def source_from_environment(root: Path | None = None) -> UniverseSource:
         base = root or Path.cwd()
         return FileUniverseSource(base / os.getenv("UNIVERSE_FILE", "config/initial_universe.csv"))
     if source == "supabase":
-        url = os.environ["SUPABASE_URL"]
-        key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        url = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
+        key = os.environ["SUPABASE_SECRET_KEY"]
         return SupabaseUniverseSource(create_client(url, key))
     raise ValueError("UNIVERSE_SOURCE must be exactly 'file' or 'supabase'.")

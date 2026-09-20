@@ -24,7 +24,7 @@ CSV universe + SPY/QQQ/SOXX
 - `config/initial_universe.csv` contains the normalized initial 78-symbol analytics universe.
 - `.github/workflows/portfolio-risk-refresh.yml` runs the same refresh command on schedule and on demand.
 
-The browser receives only the Supabase anonymous key. The service-role key is restricted to the pipeline and must never use a `NEXT_PUBLIC_` prefix.
+The browser receives only `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. `SUPABASE_SECRET_KEY` is restricted to the pipeline and must never use a `NEXT_PUBLIC_` prefix.
 
 ## Four separate valuation concepts
 
@@ -205,7 +205,7 @@ The global analytics date is the `as_of` date of the latest run whose analytics 
 - `Partial`: 1–14/15.
 - `Unavailable`: 0/15.
 
-Older ticker-specific metrics never make a ticker Ready. Unsupported holdings remain valid and use manual/default fallbacks. Ticker requests and general feedback link to prefilled GitHub issue forms; the deployment has no GitHub write credential and does not create pull requests.
+Older ticker-specific metrics never make a ticker Ready. Unsupported holdings remain valid and use manual/default fallbacks. The Supported Tickers tab filters by price availability and accepts a ticker request directly into `ticker_support_requests`; requests are `requested`, `added`, or `declined`. A refresh marks a pending request `added` when the active universe contains it. The deployment has no GitHub write credential and does not create pull requests.
 
 ## Scenario simulator
 
@@ -230,6 +230,7 @@ Apply migrations in order:
 
 1. `supabase/migrations/202609200001_initial.sql`
 2. `supabase/migrations/202609200002_portfolio_snapshots.sql`
+3. `supabase/migrations/202609200003_ticker_support_requests.sql`
 
 The second migration backfills valid legacy state into a `legacy` snapshot. Then:
 
@@ -273,8 +274,9 @@ A required benchmark failure prevents analytics publication. An individual-secur
 
 Repository secrets:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
 
 `yfinance` is intended for research and personal use; review its project terms and Yahoo data-use notice before using the pipeline for another purpose.
 
