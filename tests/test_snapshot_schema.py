@@ -19,9 +19,12 @@ def test_snapshot_migration_contains_reproducibility_and_concurrency_contracts()
     assert "greatest(derived_nav" not in migration
 
 
-def test_snapshot_api_derives_owner_and_returns_actionable_conflict_details() -> None:
+def test_snapshot_api_uses_server_only_shared_access_and_returns_conflict_details() -> None:
     route = Path("app/api/portfolio/snapshots/route.ts").read_text()
-    assert "supabase.auth.getUser()" in route
+    migration = Path("supabase/migrations/202609200004_vercel_shared_access.sql").read_text()
+    assert "createAdminClient" in route
+    assert "create_shared_portfolio_snapshot" in route
+    assert "service role required" in migration
     assert "p_base_snapshot_id" in route
     assert "latestSnapshotId" in route
     assert "latestSavedAt" in route

@@ -1,8 +1,8 @@
-import type { NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/proxy";
+import { NextResponse, type NextRequest } from "next/server";
 
-export async function proxy(request: NextRequest) {
-  return updateSession(request);
+// Public demo mode: access control returns before persistent dashboard data is enabled.
+export function proxy(_request: NextRequest) {
+  return NextResponse.next();
 }
 
 export const config = {

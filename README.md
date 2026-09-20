@@ -1,6 +1,6 @@
 # Portfolio Risk Lens
 
-Portfolio Risk Lens is a private, single-owner long-short portfolio dashboard. It combines a Next.js interface, Supabase authentication and storage, and a Python/yfinance analytics pipeline. This README is the source of truth for valuation, editing, analytics, security, and operating behavior.
+Portfolio Risk Lens is a private shared long-short portfolio dashboard. Vercel Authentication is the interactive access gate for its two co-owners. The Next.js server, protected by Vercel, is the only application component that reads or writes Supabase. This README is the source of truth for valuation, editing, analytics, security, and operating behavior.
 
 ## System model
 
@@ -24,7 +24,15 @@ CSV universe + SPY/QQQ/SOXX
 - `config/initial_universe.csv` contains the normalized initial 78-symbol analytics universe.
 - `.github/workflows/portfolio-risk-refresh.yml` runs the same refresh command on schedule and on demand.
 
-The browser receives only `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. `SUPABASE_SECRET_KEY` is restricted to the pipeline and must never use a `NEXT_PUBLIC_` prefix.
+The browser does not call Supabase. `SUPABASE_URL` and `SUPABASE_SECRET_KEY` are available only to Vercel server code and the GitHub Actions pipeline; neither uses a `NEXT_PUBLIC_` prefix.
+
+## Shared access and deployment security
+
+Enable **Vercel Authentication → All Deployments** and grant project access only to the two approved Vercel accounts. Do not use Vercel shareable links for this dashboard.
+
+Supabase Auth is intentionally not used for application users. All browser requests first pass Vercel Authentication; Vercel server routes then use `SUPABASE_SECRET_KEY` to call server-only database functions. Those functions reject non-service-role callers and require exactly one shared portfolio. This gives both approved users equal update authority without exposing Supabase credentials or database APIs to the browser.
+
+Apply migrations in order through `202609200004_vercel_shared_access.sql` before enabling persistent deployment. This model has shared, rather than per-user, database attribution: snapshot records show the shared portfolio owner, not which Vercel user made the edit.
 
 ## Four separate valuation concepts
 
@@ -131,7 +139,7 @@ Each snapshot position stores:
 
 Manual beta fallbacks are normalized by position, benchmark, and lookback. Unsupported positions intentionally have no foreign key to the analytics universe; universe membership is enrichment rather than holding validity.
 
-The authenticated save function derives the owner's portfolio from `auth.uid()`. It does not trust a client-selected portfolio ID. It validates values and referenced price publications, derives NAV, and inserts the snapshot, positions, and beta fallbacks atomically.
+The Vercel-only save function does not trust a client-selected portfolio ID. It resolves the sole shared portfolio through the server-only database role, validates values and referenced price publications, derives NAV, and inserts the snapshot, positions, and beta fallbacks atomically.
 
 `daily_price_versions` preserves the immutable price publication identity `(ticker, price_date, pipeline_run_id)` used during review. `daily_prices` remains the rolling analytics history.
 
@@ -231,19 +239,20 @@ Apply migrations in order:
 1. `supabase/migrations/202609200001_initial.sql`
 2. `supabase/migrations/202609200002_portfolio_snapshots.sql`
 3. `supabase/migrations/202609200003_ticker_support_requests.sql`
+4. `supabase/migrations/202609200004_vercel_shared_access.sql`
 
 The second migration backfills valid legacy state into a `legacy` snapshot. Then:
 
-1. Create or invite the single owner in Supabase Authentication and enable email magic link/OTP.
-2. Add local and deployed `/auth/callback` URLs to the redirect allowlist.
-3. Configure the variables in `.env.example`.
+1. Create one technical Supabase owner record solely for the initial seed; it is database metadata, not an application login for either dashboard user.
+2. Configure the variables in `.env.example` in GitHub Actions and Vercel. Only Vercel server code and the pipeline receive `SUPABASE_SECRET_KEY`.
+3. Enable Vercel Authentication for **All Deployments** and grant only the approved Vercel users access.
 4. Run the first refresh and seed the snapshot if needed:
 
    ```bash
    PORTFOLIO_OWNER_ID=<supabase-auth-user-uuid> uv run port-risk-lens refresh --seed-portfolio
    ```
 
-The login flow accepts only `OWNER_EMAIL` and does not create users. Owner-based row-level security protects snapshots and positions. The protected save transaction independently rechecks ownership.
+Supabase Auth is not used by dashboard visitors. The technical owner record supports the existing portfolio schema and initial seed only; the server-side shared-access transaction independently resolves that one portfolio.
 
 ## Universe and later Supabase migration
 
@@ -274,8 +283,7 @@ A required benchmark failure prevents analytics publication. An individual-secur
 
 Repository secrets:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 
 `yfinance` is intended for research and personal use; review its project terms and Yahoo data-use notice before using the pipeline for another purpose.

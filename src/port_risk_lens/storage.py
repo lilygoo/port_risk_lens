@@ -17,7 +17,7 @@ def _chunks(rows: list[dict], size: int = 500) -> Iterable[list[dict]]:
 
 class SupabaseStore:
     def __init__(self, client: Client | None = None) -> None:
-        self.client = client or create_client(os.environ["NEXT_PUBLIC_SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
+        self.client = client or create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SECRET_KEY"])
 
     def start_run(self, provider: str, git_sha: str | None) -> str:
         response = self.client.table("pipeline_runs").insert({

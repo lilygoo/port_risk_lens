@@ -68,14 +68,14 @@ function SummaryCell({ label, current, simulated, difference, incomplete = false
   );
 }
 
-function SupportedTickers({ portfolio, authenticated }: { portfolio: PortfolioData; authenticated: boolean }) {
+function SupportedTickers({ portfolio, persistent }: { portfolio: PortfolioData; persistent: boolean }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [priceFilter, setPriceFilter] = useState<"all" | "available" | "missing">("all");
   const [requestedTicker, setRequestedTicker] = useState("");
   const [localRequests, setLocalRequests] = useState(portfolio.tickerSupportRequests);
   const [message, setMessage] = useState("");
-  const requests = authenticated ? portfolio.tickerSupportRequests : localRequests;
+  const requests = persistent ? portfolio.tickerSupportRequests : localRequests;
   const supported = new Set(portfolio.supportedSecurities.map((security) => security.ticker));
   const rows = [
     ...portfolio.supportedSecurities.map((security) => ({ ...security, support: "supported" as const })),
@@ -94,7 +94,7 @@ function SupportedTickers({ portfolio, authenticated }: { portfolio: PortfolioDa
     if (!/^[A-Z0-9]+(?:[.-][A-Z0-9]+)*$/.test(ticker)) { setMessage("Enter a valid ticker."); return; }
     if (supported.has(ticker)) { setMessage(`${ticker} is already supported.`); return; }
     if (requests.some((request) => request.ticker === ticker && request.status === "requested")) { setMessage(`${ticker} is already requested.`); return; }
-    if (!authenticated) {
+    if (!persistent) {
       setLocalRequests((current) => [...current, { ticker, status: "requested" }]);
       setRequestedTicker(""); setMessage(`${ticker} is now requested in this local preview.`); return;
     }
@@ -130,10 +130,10 @@ function SupportedTickers({ portfolio, authenticated }: { portfolio: PortfolioDa
 }
 
 export function Dashboard({
-  initialPortfolio, authenticated = false, activeTab = "positions", initialEdit = false,
+  initialPortfolio, persistent = false, activeTab = "positions", initialEdit = false,
 }: {
   initialPortfolio: PortfolioData;
-  authenticated?: boolean;
+  persistent?: boolean;
   activeTab?: "positions" | "supported";
   initialEdit?: boolean;
 }) {
@@ -187,7 +187,6 @@ export function Dashboard({
         <div className="header-actions">
           <a className="header-link" href={`${REPOSITORY_URL}/issues/new?template=feature-request.yml`} target="_blank" rel="noreferrer">Send feedback</a>
           <div className="as-of"><span aria-hidden="true" />Prices as of {asOf}</div>
-          {authenticated && <form action="/auth/signout" method="post"><button className="header-link" type="submit">Sign out</button></form>}
         </div>
       </header>
 
@@ -196,8 +195,8 @@ export function Dashboard({
         <Link className={activeTab === "supported" ? "active" : ""} href="/?tab=supported">Supported tickers</Link>
       </nav>
 
-      {activeTab === "supported" ? <SupportedTickers portfolio={initialPortfolio} authenticated={authenticated} /> : <>
-        {editing ? <InlinePortfolioEditor portfolio={initialPortfolio} canSave={authenticated} onCancel={() => setEditing(false)} onSaved={() => { setTrades([]); setEditing(false); }} /> : <section className="panel positions-panel" aria-labelledby="positions-title">
+      {activeTab === "supported" ? <SupportedTickers portfolio={initialPortfolio} persistent={persistent} /> : <>
+        {editing ? <InlinePortfolioEditor portfolio={initialPortfolio} canSave={persistent} onCancel={() => setEditing(false)} onSaved={() => { setTrades([]); setEditing(false); }} /> : <section className="panel positions-panel" aria-labelledby="positions-title">
           <div className="panel-heading">
             <div><h2 id="positions-title">Current positions</h2><p>Signed exposure and single-name risk metrics</p></div>
             <div className="panel-actions">

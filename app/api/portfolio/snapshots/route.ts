@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { BENCHMARKS, LOOKBACKS, type Benchmark, type LookbackDays, type PriceSource } from "@/lib/types";
 
 const TICKER_PATTERN = /^[A-Z0-9]+(?:[.-][A-Z0-9]+)*$/;
@@ -23,9 +23,7 @@ type SnapshotBody = {
 };
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const supabase = createAdminClient();
 
   const body = await request.json().catch(() => ({})) as SnapshotBody;
   if (!Number.isFinite(body.cash) || !Array.isArray(body.positions)) {
@@ -108,7 +106,7 @@ export async function POST(request: NextRequest) {
   }
 
   const appVersion = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? "local";
-  const { data, error } = await supabase.rpc("create_portfolio_snapshot", {
+  const { data, error } = await supabase.rpc("create_shared_portfolio_snapshot", {
     p_base_snapshot_id: body.baseSnapshotId ?? null,
     p_cash: Number(body.cash),
     p_positions: databasePositions,
