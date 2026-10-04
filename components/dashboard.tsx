@@ -41,7 +41,7 @@ function toggleRequired<T>(current: T[], value: T): T[] {
 }
 
 function sourceLabel(source: BetaSource) {
-  return source === "calculated" ? "Calculated" : source === "manual" ? "Manual" : "Default β=1";
+  return source === "calculated" ? "Pipeline" : source === "manual" ? "Manual" : "Default β=1";
 }
 
 function MetricCell({ position, column, nav }: { position: Position; column: MetricColumn; nav: number }) {
@@ -227,7 +227,8 @@ export function Dashboard({
                   {columns.map((column) => {
                     if (!column.benchmark || (column.metric !== "beta" && column.metric !== "beta_contribution")) return <td key={`${column.metric}-${column.benchmark ?? "standalone"}-${column.lookback}`}>—</td>;
                     const aggregate = betaAggregate(initialPortfolio.positions, initialPortfolio.nav, column.benchmark, column.lookback);
-                    return <td key={`${column.metric}-${column.benchmark}-${column.lookback}`}><span className={`metric-reading aggregate-${aggregate.status}`} title={`Calculated ${percent(aggregate.coverage.calculated)} · Manual ${percent(aggregate.coverage.manual)} · Default ${percent(aggregate.coverage.default)}`}><strong>{number(aggregate.value, 2)}</strong><small>{aggregate.status === "calculated" ? "Calculated" : aggregate.status === "manual-assisted" ? "Manual-assisted" : "Default-assisted"}{initialPortfolio.valuationIncomplete ? " · incomplete" : ""}</small></span></td>;
+                    const statusLabel = aggregate.status === "manual-assisted" ? "Manual-assisted" : aggregate.status === "default-assisted" ? "Default-assisted" : "";
+                    return <td key={`${column.metric}-${column.benchmark}-${column.lookback}`}><span className={`metric-reading aggregate-${aggregate.status}`} title={`Pipeline ${percent(aggregate.coverage.calculated)} · Manual ${percent(aggregate.coverage.manual)} · Default ${percent(aggregate.coverage.default)}`}><strong>{number(aggregate.value, 2)}</strong>{(statusLabel || initialPortfolio.valuationIncomplete) && <small>{statusLabel}{statusLabel && initialPortfolio.valuationIncomplete ? " · " : ""}{initialPortfolio.valuationIncomplete ? "Incomplete valuation" : ""}</small>}</span></td>;
                   })}
                 </tr>
                 {filteredRows.map((position) => (

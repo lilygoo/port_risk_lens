@@ -320,7 +320,7 @@ export function PortfolioEditor({
               </div>
               <details className="beta-fallbacks">
                 <summary>Beta fallbacks</summary>
-                <p>Calculated beta wins. Blank values use the application default β=1.0.</p>
+                <p>Pipeline beta is active when available. Blank values use the application default β=1.0.</p>
                 <div>{BENCHMARKS.flatMap((benchmark) => LOOKBACKS.map((lookback) => (
                   <label key={`${benchmark}-${lookback}`}><span>{benchmark} · {lookback}D</span><input type="number" step="0.001" value={position.betaFallbacks[fallbackKey(benchmark, lookback)] ?? ""} onChange={(event) => setPositions((current) => current.map((item) => item.ticker === position.ticker ? {
                     ...item, betaFallbacks: { ...item.betaFallbacks, [fallbackKey(benchmark, lookback)]: event.target.value },
