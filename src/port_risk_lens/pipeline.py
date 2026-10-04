@@ -22,18 +22,18 @@ def refresh(requested_as_of: date | None = None, store: SupabaseStore | None = N
         for benchmark in BENCHMARKS:
             provider_to_ticker[benchmark] = benchmark
         provider_histories, provider_errors = provider.fetch(list(provider_to_ticker), requested_as_of)
-        histories: dict[str, PriceHistory] = {
+        price_histories: dict[str, PriceHistory] = {
             provider_to_ticker[provider_symbol]: history for provider_symbol, history in provider_histories.items()
         }
         errors.update({provider_to_ticker.get(symbol, symbol): message for symbol, message in provider_errors.items()})
 
-        missing_benchmarks = [benchmark for benchmark in BENCHMARKS if benchmark not in histories]
+        missing_benchmarks = [benchmark for benchmark in BENCHMARKS if benchmark not in price_histories]
         if missing_benchmarks:
             raise RuntimeError(f"Required benchmark retrieval failed: {', '.join(missing_benchmarks)}")
 
-        as_of = min(max(histories[benchmark].adjusted_close.index).date() for benchmark in BENCHMARKS)
+        as_of = min(max(price_histories[benchmark].adjusted_close.index).date() for benchmark in BENCHMARKS)
         retained_histories: dict[str, PriceHistory] = {}
-        for ticker, history in histories.items():
+        for ticker, history in price_histories.items():
             try:
                 retained_histories[ticker] = provider.retain_required_history(history, as_of)
             except ValueError as exc:
@@ -55,11 +55,16 @@ def refresh(requested_as_of: date | None = None, store: SupabaseStore | None = N
                 for benchmark in BENCHMARKS:
                     beta_metrics.append(calculate_beta(ticker, returns[ticker], benchmark, returns[benchmark], as_of, lookback))
 
-        database.upsert_prices(histories, run_id)
+        # Persist valid prices even for new listings that lack the full 365-day
+        # return history needed for analytics. They are supported once a price
+        # was actually retrieved; analytics can remain unavailable until later.
+        database.upsert_prices(price_histories, run_id)
         calculation_version = os.getenv("CALCULATION_VERSION", CALCULATION_VERSION)
         database.upsert_risk_metrics(risk_metrics, run_id, calculation_version)
         database.upsert_beta_metrics(beta_metrics, run_id, calculation_version)
-        database.resolve_ticker_support_requests(security.ticker for security in securities)
+        database.mark_requested_tickers_supported(
+            security.ticker for security in securities if security.ticker in price_histories
+        )
         status = "partial_success" if errors else "success"
         database.finish_run(run_id, status, errors, analytics_as_of=as_of)
         return {"run_id": run_id, "status": status, "as_of": as_of.isoformat(), "errors": errors}

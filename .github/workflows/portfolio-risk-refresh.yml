@@ -20,8 +20,7 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      UNIVERSE_SOURCE: file
-      UNIVERSE_FILE: config/initial_universe.csv
+      UNIVERSE_SOURCE: supabase
       CALCULATION_VERSION: v1
     steps:
       - uses: actions/checkout@v5

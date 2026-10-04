@@ -91,12 +91,18 @@ class SupabaseStore:
         for chunk in _chunks(rows):
             self.client.table("security_beta_metrics").upsert(chunk, on_conflict="ticker,as_of_date,lookback_days,benchmark_ticker").execute()
 
-    def resolve_ticker_support_requests(self, active_tickers: Iterable[str]) -> None:
-        """Mark pending requests as added once the active universe contains them."""
-        tickers = sorted(set(active_tickers))
+    def mark_requested_tickers_supported(self, priced_tickers: Iterable[str]) -> None:
+        """Promote requested symbols only after the provider returned usable prices."""
+        tickers = sorted(set(priced_tickers))
         if not tickers:
             return
+        resolved_at = datetime.now(timezone.utc).isoformat()
+        self.client.table("security_universe").update({
+            "support_status": "supported",
+            "active": True,
+            "supported_at": resolved_at,
+        }).eq("support_status", "requested").in_("ticker", tickers).execute()
         self.client.table("ticker_support_requests").update({
             "status": "added",
-            "resolved_at": datetime.now(timezone.utc).isoformat(),
+            "resolved_at": resolved_at,
         }).eq("status", "requested").in_("ticker", tickers).execute()
