@@ -8,7 +8,7 @@ export type Metric = (typeof METRICS)[number];
 export type PriceSource = "pipeline" | "manual" | "default";
 export type BetaSource = "calculated" | "manual" | "default";
 export type AnalyticsStatus = "ready" | "partial" | "unavailable";
-export type SupportStatus = "supported" | "requested";
+export type SupportStatus = "supported" | "requested" | "declined";
 export type NullableSeries = Record<LookbackDays, number | null>;
 
 export interface BetaReading {
@@ -52,6 +52,12 @@ export interface SupportedSecurity {
   analyticsStatus: AnalyticsStatus;
 }
 
+/** A universe record is the authoritative support lifecycle shown in the tab. */
+export interface UniverseSecurity extends SupportedSecurity {
+  supportStatus: SupportStatus;
+  active: boolean;
+}
+
 export interface TickerSupportRequest {
   ticker: string;
   status: "requested" | "added" | "declined";
@@ -68,6 +74,7 @@ export interface PortfolioData {
   asOf: string;
   positions: Position[];
   supportedSecurities: SupportedSecurity[];
+  universeSecurities: UniverseSecurity[];
   tickerSupportRequests: TickerSupportRequest[];
   valuationIncomplete: boolean;
   unpricedTickers: string[];

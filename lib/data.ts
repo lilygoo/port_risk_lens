@@ -1,11 +1,11 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { loadActiveUniverse } from "@/lib/universe-file";
+import { loadUniverse } from "@/lib/universe-file";
 import { deriveNav, unpricedTickers } from "@/lib/portfolio";
 import {
   BENCHMARKS, LOOKBACKS,
   type Benchmark, type BetaReading, type LookbackDays, type ManualBetaFallback, type PortfolioData, type SecurityMetrics,
-  type SupportedSecurity,
+  type SupportedSecurity, type UniverseSecurity,
 } from "@/lib/types";
 
 function betaKey(ticker: string, benchmark: Benchmark, lookback: LookbackDays) {
@@ -43,11 +43,11 @@ export async function loadPortfolio(): Promise<PortfolioData> {
   if (snapshotError) throw snapshotError;
   if (!snapshot) throw new Error("No saved portfolio snapshot exists. Run the seed command first.");
 
-  const [{ data: snapshotPositions, error: positionError }, universe] = await Promise.all([
+  const [{ data: snapshotPositions, error: positionError }, universeRecords] = await Promise.all([
     supabase.from("portfolio_snapshot_positions")
       .select("id,ticker,signed_quantity,manual_price_fallback,valuation_price_at_save,valuation_price_source_at_save,valuation_price_date_at_save,valuation_pipeline_run_id")
       .eq("snapshot_id", snapshot.id),
-    loadActiveUniverse(supabase),
+    loadUniverse(supabase),
   ]);
   if (positionError) throw positionError;
 
@@ -81,8 +81,8 @@ export async function loadPortfolio(): Promise<PortfolioData> {
     .eq("status", "requested");
   if (requestError) throw requestError;
   const positionTickers = (snapshotPositions ?? []).map((row) => row.ticker);
-  const requestedTickers = (requestRows ?? []).map((row) => row.ticker);
-  const allTickers = [...new Set([...universe, ...positionTickers, ...requestedTickers])].sort();
+  const universeTickers = universeRecords.map((record) => record.ticker);
+  const allTickers = [...new Set([...universeTickers, ...positionTickers])].sort();
   const [{ data: prices, error: priceError }, { data: publication, error: publicationError }] = await Promise.all([
     allTickers.length
       ? supabase.from("latest_daily_price_versions").select("ticker,price_date,raw_close,pipeline_run_id").in("ticker", allTickers)
@@ -137,7 +137,9 @@ export async function loadPortfolio(): Promise<PortfolioData> {
   }
 
   const priceMap = new Map((prices ?? []).map((row) => [row.ticker, row]));
-  const supportedSet = new Set(universe);
+  const supportedSet = new Set(universeRecords
+    .filter((record) => record.active && record.supportStatus === "supported")
+    .map((record) => record.ticker));
   const positions = (snapshotPositions ?? []).map((row) => {
     const pipelinePrice = priceMap.get(row.ticker);
     const fallback = row.manual_price_fallback === null ? null : Number(row.manual_price_fallback);
@@ -159,11 +161,10 @@ export async function loadPortfolio(): Promise<PortfolioData> {
   const unpriced = unpricedTickers(positions);
   const currentNav = deriveNav(positions, Number(snapshot.cash));
 
-  const supportedSecurities: SupportedSecurity[] = universe.map((ticker) => {
+  const securityFor = (ticker: string): Omit<SupportedSecurity, "ticker"> => {
     const price = priceMap.get(ticker);
     const count = availableMetricCount.get(ticker) ?? 0;
     return {
-      ticker,
       latestPrice: price ? Number(price.raw_close) : null,
       priceDate: price?.price_date ?? null,
       pipelineRunId: price?.pipeline_run_id ?? null,
@@ -171,7 +172,16 @@ export async function loadPortfolio(): Promise<PortfolioData> {
       availableMetricCount: count,
       analyticsStatus: count === 15 ? "ready" : count > 0 ? "partial" : "unavailable",
     };
-  });
+  };
+  const supportedSecurities: SupportedSecurity[] = universeRecords
+    .filter((record) => record.active && record.supportStatus === "supported")
+    .map(({ ticker }) => ({ ticker, ...securityFor(ticker) }));
+  const universeSecurities: UniverseSecurity[] = universeRecords.map((record) => ({
+    ticker: record.ticker,
+    ...securityFor(record.ticker),
+    supportStatus: record.supportStatus,
+    active: record.active,
+  }));
   const priceDates = (prices ?? []).map((row) => row.price_date).sort();
 
   return {
@@ -185,6 +195,7 @@ export async function loadPortfolio(): Promise<PortfolioData> {
     asOf: priceDates.at(-1) ?? analyticsAsOf ?? new Date().toISOString().slice(0, 10),
     positions,
     supportedSecurities,
+    universeSecurities,
     tickerSupportRequests: (requestRows ?? []).map((row) => ({ ticker: row.ticker, status: row.status as "requested" })),
     valuationIncomplete: unpriced.length > 0,
     unpricedTickers: unpriced,

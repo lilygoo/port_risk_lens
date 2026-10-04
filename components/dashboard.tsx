@@ -75,15 +75,14 @@ function SupportedTickers({ portfolio, persistent }: { portfolio: PortfolioData;
   const [requestedTicker, setRequestedTicker] = useState("");
   const [localRequests, setLocalRequests] = useState(portfolio.tickerSupportRequests);
   const [message, setMessage] = useState("");
-  const requests = persistent ? portfolio.tickerSupportRequests : localRequests;
-  const supported = new Set(portfolio.supportedSecurities.map((security) => security.ticker));
-  const rows = [
-    ...portfolio.supportedSecurities.map((security) => ({ ...security, support: "supported" as const })),
-    ...requests.filter((request) => !supported.has(request.ticker)).map((request) => ({
+  const rows = persistent ? portfolio.universeSecurities : [
+    ...portfolio.universeSecurities,
+    ...localRequests.filter((request) => !portfolio.universeSecurities.some((security) => security.ticker === request.ticker)).map((request) => ({
       ticker: request.ticker, latestPrice: null, priceDate: null, pipelineRunId: null, analyticsAsOf: null,
-      availableMetricCount: 0, analyticsStatus: "unavailable" as const, support: "requested" as const,
+      availableMetricCount: 0, analyticsStatus: "unavailable" as const, supportStatus: "requested" as const, active: false,
     })),
   ].sort((a, b) => a.ticker.localeCompare(b.ticker));
+  const statusByTicker = new Map(rows.map((security) => [security.ticker, security.supportStatus]));
   const filtered = rows.filter((security) => (
     security.ticker.includes(query.trim().toUpperCase())
     && (priceFilter === "all" || (priceFilter === "available" ? security.latestPrice !== null : security.latestPrice === null))
@@ -92,8 +91,8 @@ function SupportedTickers({ portfolio, persistent }: { portfolio: PortfolioData;
   async function requestTicker() {
     const ticker = requestedTicker.trim().toUpperCase();
     if (!/^[A-Z0-9]+(?:[.-][A-Z0-9]+)*$/.test(ticker)) { setMessage("Enter a valid ticker."); return; }
-    if (supported.has(ticker)) { setMessage(`${ticker} is already supported.`); return; }
-    if (requests.some((request) => request.ticker === ticker && request.status === "requested")) { setMessage(`${ticker} is already requested.`); return; }
+    if (statusByTicker.get(ticker) === "supported") { setMessage(`${ticker} is already supported.`); return; }
+    if (statusByTicker.get(ticker) === "requested") { setMessage(`${ticker} is already requested.`); return; }
     if (!persistent) {
       setLocalRequests((current) => [...current, { ticker, status: "requested" }]);
       setRequestedTicker(""); setMessage(`${ticker} is now requested in this local preview.`); return;
@@ -118,7 +117,7 @@ function SupportedTickers({ portfolio, persistent }: { portfolio: PortfolioData;
           <tbody>{filtered.map((security) => (
             <tr key={security.ticker}>
               <th scope="row" className="ticker-cell">{security.ticker}</th>
-              <td><span className={`status-badge status-${security.support === "supported" ? "ready" : "partial"}`}>{security.support === "supported" ? "Supported" : "Requested"}</span></td>
+              <td><span className={`status-badge status-${security.supportStatus === "supported" ? "ready" : security.supportStatus === "requested" ? "partial" : "unavailable"}`}>{security.supportStatus === "supported" ? "Supported" : security.supportStatus === "requested" ? "Requested" : "Declined"}</span></td>
               <td><span className={`status-badge ${security.latestPrice === null ? "status-unavailable" : "status-ready"}`}>{security.latestPrice === null ? "Missing" : "Available"}</span></td>
               <td><span className={`status-badge status-${security.analyticsStatus}`}>{security.analyticsStatus === "ready" ? "Ready" : security.analyticsStatus === "partial" ? `Partial · ${security.availableMetricCount}/15` : "Unavailable · 0/15"}</span></td>
             </tr>

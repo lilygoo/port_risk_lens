@@ -240,6 +240,7 @@ Apply migrations in order:
 2. `supabase/migrations/202609200002_portfolio_snapshots.sql`
 3. `supabase/migrations/202609200003_ticker_support_requests.sql`
 4. `supabase/migrations/202609200004_vercel_shared_access.sql`
+5. `supabase/migrations/202609200005_server_read_grants.sql`
 
 The second migration backfills valid legacy state into a `legacy` snapshot. Then:
 

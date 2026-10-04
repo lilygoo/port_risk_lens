@@ -1,4 +1,4 @@
-import type { Benchmark, LookbackDays, PortfolioData, SecurityMetrics, SupportedSecurity } from "@/lib/types";
+import type { Benchmark, LookbackDays, PortfolioData, SecurityMetrics, SupportedSecurity, UniverseSecurity } from "@/lib/types";
 import { deriveNav } from "@/lib/portfolio";
 
 const targets: Array<[string, number, number, number]> = [
@@ -59,6 +59,20 @@ export const localPortfolio: PortfolioData = {
     availableMetricCount: 15,
     analyticsStatus: "ready",
   })),
+  universeSecurities: [
+    ...positions.map((position) => ({
+      ticker: position.ticker,
+      latestPrice: position.price,
+      priceDate: position.priceDate,
+      pipelineRunId: position.pipelineRunId,
+      analyticsAsOf: "2026-09-18",
+      availableMetricCount: 15,
+      analyticsStatus: "ready" as const,
+      supportStatus: "supported" as const,
+      active: true,
+    })),
+    { ticker: "CRWV", latestPrice: null, priceDate: null, pipelineRunId: null, analyticsAsOf: null, availableMetricCount: 0, analyticsStatus: "unavailable", supportStatus: "requested", active: false },
+  ],
   tickerSupportRequests: [{ ticker: "CRWV", status: "requested" }],
   valuationIncomplete: false,
   unpricedTickers: [],
@@ -75,5 +89,10 @@ export function withLocalSupportedSecurities(portfolio: PortfolioData, tickers: 
     availableMetricCount: 0,
     analyticsStatus: "unavailable",
   });
-  return { ...portfolio, supportedSecurities };
+  const requested = portfolio.universeSecurities.filter((security) => security.supportStatus === "requested");
+  const universeSecurities: UniverseSecurity[] = [
+    ...supportedSecurities.map((security) => ({ ...security, supportStatus: "supported" as const, active: true })),
+    ...requested.filter((security) => !tickers.includes(security.ticker)),
+  ];
+  return { ...portfolio, supportedSecurities, universeSecurities };
 }
