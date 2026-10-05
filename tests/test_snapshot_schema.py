@@ -45,3 +45,18 @@ def test_analytics_publication_is_separate_from_price_ingestion() -> None:
     storage = Path("src/port_risk_lens/storage.py").read_text()
     assert "analytics_as_of=as_of" in pipeline
     assert "analytics_published_at" in storage
+
+
+def test_requested_universe_tickers_are_automatically_onboarded_and_observable() -> None:
+    migration = Path("supabase/migrations/202610040007_automatic_universe_onboarding.sql").read_text()
+    pipeline = Path("src/port_risk_lens/pipeline.py").read_text()
+    storage = Path("src/port_risk_lens/storage.py").read_text()
+    universe = Path("src/port_risk_lens/universe.py").read_text()
+    assert "last_attempted_at" in migration
+    assert "last_price_at" in migration
+    assert "last_error" in migration
+    assert "support_status in ('requested', 'supported')" in migration
+    assert "values (v_ticker, v_ticker, 'equity', true, 'requested'" in migration
+    assert ".in_(\"support_status\", [\"requested\", \"supported\"])" in universe
+    assert "record_universe_refresh" in pipeline
+    assert "support_status\": \"supported\"" in storage

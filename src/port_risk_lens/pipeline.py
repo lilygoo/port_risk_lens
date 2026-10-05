@@ -59,12 +59,14 @@ def refresh(requested_as_of: date | None = None, store: SupabaseStore | None = N
         # return history needed for analytics. They are supported once a price
         # was actually retrieved; analytics can remain unavailable until later.
         database.upsert_prices(price_histories, run_id)
+        database.record_universe_refresh(
+            attempted_tickers=(security.ticker for security in securities),
+            priced_tickers=(security.ticker for security in securities if security.ticker in price_histories),
+            errors=errors,
+        )
         calculation_version = os.getenv("CALCULATION_VERSION", CALCULATION_VERSION)
         database.upsert_risk_metrics(risk_metrics, run_id, calculation_version)
         database.upsert_beta_metrics(beta_metrics, run_id, calculation_version)
-        database.mark_requested_tickers_supported(
-            security.ticker for security in securities if security.ticker in price_histories
-        )
         status = "partial_success" if errors else "success"
         database.finish_run(run_id, status, errors, analytics_as_of=as_of)
         return {"run_id": run_id, "status": status, "as_of": as_of.isoformat(), "errors": errors}

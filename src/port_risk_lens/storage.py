@@ -91,18 +91,41 @@ class SupabaseStore:
         for chunk in _chunks(rows):
             self.client.table("security_beta_metrics").upsert(chunk, on_conflict="ticker,as_of_date,lookback_days,benchmark_ticker").execute()
 
-    def mark_requested_tickers_supported(self, priced_tickers: Iterable[str]) -> None:
-        """Promote requested symbols only after the provider returned usable prices."""
-        tickers = sorted(set(priced_tickers))
-        if not tickers:
+    def record_universe_refresh(
+        self,
+        attempted_tickers: Iterable[str],
+        priced_tickers: Iterable[str],
+        errors: dict[str, str],
+    ) -> None:
+        """Persist the outcome of automatic ticker onboarding and later retries."""
+        attempted = sorted(set(attempted_tickers))
+        priced = sorted(set(priced_tickers))
+        if not attempted:
             return
-        resolved_at = datetime.now(timezone.utc).isoformat()
+
+        recorded_at = datetime.now(timezone.utc).isoformat()
         self.client.table("security_universe").update({
-            "support_status": "supported",
-            "active": True,
-            "supported_at": resolved_at,
-        }).eq("support_status", "requested").in_("ticker", tickers).execute()
-        self.client.table("ticker_support_requests").update({
-            "status": "added",
-            "resolved_at": resolved_at,
-        }).eq("status", "requested").in_("ticker", tickers).execute()
+            "last_attempted_at": recorded_at,
+        }).in_("ticker", attempted).execute()
+
+        if priced:
+            self.client.table("security_universe").update({
+                "last_price_at": recorded_at,
+                "last_error": None,
+            }).in_("ticker", priced).execute()
+            self.client.table("security_universe").update({
+                "support_status": "supported",
+                "active": True,
+                "supported_at": recorded_at,
+            }).eq("support_status", "requested").in_("ticker", priced).execute()
+            self.client.table("ticker_support_requests").update({
+                "status": "added",
+                "resolved_at": recorded_at,
+            }).eq("status", "requested").in_("ticker", priced).execute()
+
+        for ticker in attempted:
+            if ticker in priced or ticker not in errors:
+                continue
+            self.client.table("security_universe").update({
+                "last_error": errors[ticker],
+            }).eq("ticker", ticker).execute()

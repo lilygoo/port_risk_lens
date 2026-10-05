@@ -54,6 +54,7 @@ class SupabaseUniverseSource(UniverseSource):
             self.client.table("security_universe")
             .select("ticker,provider_symbol,display_name,instrument_type")
             .eq("active", True)
+            .in_("support_status", ["requested", "supported"])
             .execute()
         )
         securities: dict[str, SecurityDefinition] = {}
